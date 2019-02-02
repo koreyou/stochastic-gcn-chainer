@@ -32,24 +32,24 @@ class GCN(chainer.Chain):
         self.adj = adj
         self.features = features
         self.labels = labels
-        self.history1 = features
+        self.n_samples = 2
         # FIXME: initialize history with proper values
         self.history2 = np.random.random(
             (adj.shape[0], feat_size)).astype(np.float32)
 
     def _forward(self, mask):
         device = chainer.backends.cuda.get_device_from_array(mask)
-        adjs, mask = random_sampling(self.adj, mask, 2, 2)
+        adjs_sample, adjs, rfs_sample, rfs = random_sampling(self.adj, mask, 2, self.n_samples)
 
-        h = sparse_matmul2(adjs[0][0], self.features[mask, :])
+        # Do not calculate CV because self.features are always fixed
+        history = self.features[rfs[0]]
+        if device.id >= 0:
+            history = chainer.backends.cuda.to_gpu(history, device=device)
+        h = sparse_matmul2(adjs[0], history)
         if chainer.config.train:
             with chainer.no_backprop_mode():
                 h.data = F.dropout(h.data, self.dropout).data
             h.eliminate_zeros()
-        history = self.history1[adjs[0][3]]
-        if device.id >= 0:
-            history = chainer.backends.cuda.to_gpu(history, device=device)
-        h += sparse_matmul2(adjs[0][1], history)
         h = sparse_matmul2(h, self.W1)
         del history
 
@@ -57,23 +57,25 @@ class GCN(chainer.Chain):
         # self.history1[adjs[0][2]] = chainer.backends.cuda.to_cpu(h)
 
         h = F.relu(h)
-        self.history2[adjs[0][2]] = chainer.backends.cuda.to_cpu(h.data)
 
-        h = sparse_matmul2(adjs[1][0], h)
-        history = self.history2[adjs[1][3]]
+        h1 = h
+        h = sparse_matmul2(adjs_sample[1], h - self.history2[rfs_sample[1]])
+        # update history
+        self.history2[rfs_sample[1]] = chainer.backends.cuda.to_cpu(h1.data)
+        del h1
+
+        history = self.history2[rfs[1]]
         if device.id >= 0:
             history = chainer.backends.cuda.to_gpu(history, device=device)
-        h += sparse_matmul2(adjs[1][1], history)
+        h += sparse_matmul2(adjs[1], history)
 
         h = F.dropout(h, self.dropout)
         h = F.matmul(h, self.W2)
-        del history
-        # update history
 
         return h
 
     def __call__(self, idx):
-        mask = np.zeros([self.features.shape[0]], dtype=bool)
+        mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
         mask[idx] = True
         out = self._forward(mask)
 
