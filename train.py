@@ -94,9 +94,11 @@ def main():
         chainer.serializers.save_npz(
             os.path.join(args.out, 'best_model.npz'), model)
 
+    print('Updating history for the test nodes...')
+    model.make_exact(10, 32)
+
     print('Running test...')
-    with chainer.using_config('train', False), chainer.no_backprop_mode():
-        _, accuracy = model.evaluate(idx_test)
+    _, accuracy = model.evaluate(idx_test)
     print('Test accuracy = %f' % accuracy)
 
 

@@ -8,6 +8,7 @@ try:
 except ImportError:
     from scipy.sparse import issparse
 import scipy.sparse as sp
+from tqdm import tqdm
 
 from sampling import random_sampling
 
@@ -87,10 +88,24 @@ class GCN(chainer.Chain):
         
         return loss
 
+    def make_exact(self, epochs, batchsize):
+        """ Run forward propagation multiple times to get the exact histories.
+        (Ref. section 4.1 in the paper)
+        """
+        indices = self.xp.random.permutation(self.features.shape[0])
+        for _ in tqdm(range(epochs)):
+            for i in range(0, self.features.shape[0] + batchsize, batchsize):
+                idx = indices[i:i + batchsize]
+                mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
+                mask[idx] = True
+                with chainer.using_config('train', False), chainer.no_backprop_mode():
+                    self._forward(mask)
+
     def evaluate(self, idx):
-        mask = np.zeros([self.features.shape[0]], dtype=bool)
+        mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
         mask[idx] = True
-        out = self._forward(mask)
+        with chainer.using_config('train', False), chainer.no_backprop_mode():
+            out = self._forward(mask)
 
         loss = F.softmax_cross_entropy(out, self.labels[mask])
         accuracy = F.accuracy(out, self.labels[mask])
@@ -98,16 +113,18 @@ class GCN(chainer.Chain):
         return float(loss.data), float(accuracy.data)
 
     def predict(self, idx):
-        mask = np.zeros([self.features.shape[0]], dtype=bool)
+        mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
         mask[idx] = True
-        out = self._forward(mask)
+        with chainer.using_config('train', False), chainer.no_backprop_mode():
+            out = self._forward(mask)
         pred = self.xp.argmax(out.data)
         return pred
 
     def predict_proba(self, idx):
-        mask = np.zeros([self.features.shape[0]], dtype=bool)
+        mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
         mask[idx] = True
-        out = self._forward(mask)
+        with chainer.using_config('train', False), chainer.no_backprop_mode():
+            out = self._forward(mask)
         out = out[idx]
         return out.data
 
