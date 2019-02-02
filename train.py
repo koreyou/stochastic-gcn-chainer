@@ -14,14 +14,14 @@ def main():
     parser.add_argument('--resume', '-m', type=str, default=None)
     parser.add_argument('--dataset', type=str, default='cora',
                         choices=['cora', 'pubmed', 'citeseer'])
-    parser.add_argument('--lr', type=float, default=0.005, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=0.01, help='Learning rate')
     parser.add_argument('--epoch', '-e', type=int, default=5000,
                         help='Number of sweeps over the dataset to train')
     parser.add_argument('--gpu', '-g', type=int, default=-1,
                         help='GPU ID (negative value indicates CPU)')
     parser.add_argument('--out', '-o', default='result',
                         help='Directory to output the result')
-    parser.add_argument('--unit', '-u', type=int, default=8,
+    parser.add_argument('--unit', '-u', type=int, default=16,
                         help='Number of units')
     parser.add_argument('--dropout', '-d', type=float, default=0.5,
                         help='Dropout rate')
