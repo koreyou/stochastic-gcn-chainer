@@ -3,6 +3,7 @@ import os
 
 import chainer
 from chainer import training
+from chainer.datasets import TupleDataset
 from chainer.training import extensions
 
 from nets import GCN
@@ -40,9 +41,9 @@ def main():
         args.dataset, normalization=args.normalization)
 
     train_iter = chainer.iterators.SerialIterator(
-        idx_train, batch_size=len(idx_train), shuffle=False)
+        TupleDataset(idx_train), batch_size=32, shuffle=False)
     dev_iter = chainer.iterators.SerialIterator(
-        idx_val, batch_size=len(idx_val), repeat=False, shuffle=False)
+        TupleDataset(idx_val), batch_size=32, repeat=False, shuffle=False)
 
     # Set up a neural network to train.
     model = GCN(adj, features, labels, args.unit, dropout=args.dropout)
