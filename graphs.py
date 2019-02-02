@@ -44,9 +44,9 @@ def load_data(dataset_str, normalization='gcn'):
         normalization (str): Variant of normalization method to use.
 
     Returns:
-        adj (chainer.utils.sparse.CooMatrix): (Node, Node) shape
+        adj (scipy.sparse.csr_matrix): (Node, Node) shape
             normalized adjency matrix.
-        features (chainer.utils.sparse.CooMatrix): (Node, feature size) shape
+        features (scipy.sparse.csr_matrix): (Node, feature size) shape
             normalized feature matrix.
         labels (np.ndarray): (Node, ) shape labels array
         idx_train (np.ndarray): Indices of the train
@@ -80,9 +80,10 @@ def load_data(dataset_str, normalization='gcn'):
     features = sp.vstack((allx, tx)).tolil()
     features[test_idx_reorder, :] = features[test_idx_range, :]
     features = preprocess_features(features)
-    features = to_chainer_sparse_variable(features)
+    features = features.tocsr()
 
     adj = nx.adjacency_matrix(nx.from_dict_of_lists(graph)).astype(np.float32)
+    adj = adj.tocsr()
 
     labels = np.vstack((ally, ty))
     # in citeseer dataset, there are all-none node, which we need to remove
@@ -101,8 +102,6 @@ def load_data(dataset_str, normalization='gcn'):
         adj = normalize(adj)
     else:
         adj = normalize_pygcn(adj)
-
-    adj = to_chainer_sparse_variable(adj)
 
     return adj, features, labels, idx_train, idx_val, idx_test
 
@@ -125,10 +124,10 @@ def normalize_pygcn(a):
     Refer https://github.com/tkipf/pygcn/issues/11 for the author's comment.
 
     Arguments:
-        a (scipy.sparse.coo_matrix): Unnormalied adjacency matrix
+        a (scipy.sparse.csr_matrix): Unnormalied adjacency matrix
 
     Returns:
-        scipy.sparse.coo_matrix: Normalized adjacency matrix
+        scipy.sparse.csr_matrix: Normalized adjacency matrix
     """
     a += sp.eye(a.shape[0])
     rowsum = np.array(a.sum(1))
@@ -144,10 +143,10 @@ def normalize(adj):
     the original paper.
 
     Arguments:
-        a (scipy.sparse.coo_matrix): Unnormalied adjacency matrix
+        a (scipy.sparse.csr_matrix): Unnormalied adjacency matrix
 
     Returns:
-        scipy.sparse.coo_matrix: Normalized adjacency matrix
+        scipy.sparse.csr_matrix: Normalized adjacency matrix
     """
     adj += sp.eye(adj.shape[0])
     rowsum = np.array(adj.sum(1))
@@ -157,14 +156,3 @@ def normalize(adj):
     d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
     return d_mat_inv_sqrt.dot(adj).dot(d_mat_inv_sqrt)
 
-
-def to_chainer_sparse_variable(mat):
-    mat = mat.tocoo().astype(np.float32)
-    ind = np.argsort(mat.row)
-    data = mat.data[ind]
-    row = mat.row[ind]
-    col = mat.col[ind]
-    shape = mat.shape
-    # check that adj's row indices are sorted
-    assert np.all(np.diff(row) >= 0)
-    return chainer.utils.CooMatrix(data, row, col, shape, order='C')
