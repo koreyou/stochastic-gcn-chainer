@@ -5,15 +5,13 @@ import chainer
 from chainer import training
 from chainer.training import extensions
 
-from nets import GCN, GAT
+from nets import GCN
 from graphs import load_data
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--resume', '-m', type=str, default=None)
-    parser.add_argument('--model', type=str, default='gat',
-                        choices=['gat', 'gcn'])
     parser.add_argument('--dataset', type=str, default='cora',
                         choices=['cora', 'pubmed', 'citeseer'])
     parser.add_argument('--lr', type=float, default=0.005, help='Learning rate')
@@ -48,8 +46,7 @@ def main():
 
     # Set up a neural network to train.
     print("Building model %s" % args.model)
-    model_cls = GAT if args.model == 'gat' else GCN
-    model = model_cls(adj, features, labels, args.unit, dropout=args.dropout)
+    model = GCN(adj, features, labels, args.unit, dropout=args.dropout)
 
     if args.gpu >= 0:
         # Make a specified GPU current
