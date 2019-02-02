@@ -45,7 +45,6 @@ def main():
         idx_val, batch_size=len(idx_val), repeat=False, shuffle=False)
 
     # Set up a neural network to train.
-    print("Building model %s" % args.model)
     model = GCN(adj, features, labels, args.unit, dropout=args.dropout)
 
     if args.gpu >= 0:
