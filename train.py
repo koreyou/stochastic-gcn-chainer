@@ -3,27 +3,27 @@ import os
 
 import chainer
 from chainer import training
+from chainer.datasets import TupleDataset
 from chainer.training import extensions
 
-from nets import GCN, GAT
+from nets import GCN
 from graphs import load_data
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--resume', '-m', type=str, default=None)
-    parser.add_argument('--model', type=str, default='gat',
-                        choices=['gat', 'gcn'])
     parser.add_argument('--dataset', type=str, default='cora',
                         choices=['cora', 'pubmed', 'citeseer'])
-    parser.add_argument('--lr', type=float, default=0.005, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=0.01, help='Learning rate')
     parser.add_argument('--epoch', '-e', type=int, default=5000,
                         help='Number of sweeps over the dataset to train')
+    parser.add_argument('--batchsize', '-b', type=int, default=256)
     parser.add_argument('--gpu', '-g', type=int, default=-1,
                         help='GPU ID (negative value indicates CPU)')
     parser.add_argument('--out', '-o', default='result',
                         help='Directory to output the result')
-    parser.add_argument('--unit', '-u', type=int, default=8,
+    parser.add_argument('--unit', '-u', type=int, default=32,
                         help='Number of units')
     parser.add_argument('--dropout', '-d', type=float, default=0.5,
                         help='Dropout rate')
@@ -42,14 +42,12 @@ def main():
         args.dataset, normalization=args.normalization)
 
     train_iter = chainer.iterators.SerialIterator(
-        idx_train, batch_size=len(idx_train), shuffle=False)
+        TupleDataset(idx_train), batch_size=args.batchsize, shuffle=False)
     dev_iter = chainer.iterators.SerialIterator(
-        idx_val, batch_size=len(idx_val), repeat=False, shuffle=False)
+        TupleDataset(idx_val), batch_size=args.batchsize, repeat=False, shuffle=False)
 
     # Set up a neural network to train.
-    print("Building model %s" % args.model)
-    model_cls = GAT if args.model == 'gat' else GCN
-    model = model_cls(adj, features, labels, args.unit, dropout=args.dropout)
+    model = GCN(adj, features, labels, args.unit, dropout=args.dropout)
 
     if args.gpu >= 0:
         # Make a specified GPU current
@@ -97,9 +95,11 @@ def main():
         chainer.serializers.save_npz(
             os.path.join(args.out, 'best_model.npz'), model)
 
+    print('Updating history for the test nodes...')
+    model.make_exact(10, args.batchsize)
+
     print('Running test...')
-    with chainer.using_config('train', False), chainer.no_backprop_mode():
-        _, accuracy = model.evaluate(idx_test)
+    _, accuracy = model.evaluate(idx_test)
     print('Test accuracy = %f' % accuracy)
 
 
