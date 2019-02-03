@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--lr', type=float, default=0.01, help='Learning rate')
     parser.add_argument('--epoch', '-e', type=int, default=5000,
                         help='Number of sweeps over the dataset to train')
+    parser.add_argument('--batchsize', '-b', type=int, default=256)
     parser.add_argument('--gpu', '-g', type=int, default=-1,
                         help='GPU ID (negative value indicates CPU)')
     parser.add_argument('--out', '-o', default='result',
@@ -41,9 +42,9 @@ def main():
         args.dataset, normalization=args.normalization)
 
     train_iter = chainer.iterators.SerialIterator(
-        TupleDataset(idx_train), batch_size=32, shuffle=False)
+        TupleDataset(idx_train), batch_size=args.batchsize, shuffle=False)
     dev_iter = chainer.iterators.SerialIterator(
-        TupleDataset(idx_val), batch_size=32, repeat=False, shuffle=False)
+        TupleDataset(idx_val), batch_size=args.batchsize, repeat=False, shuffle=False)
 
     # Set up a neural network to train.
     model = GCN(adj, features, labels, args.unit, dropout=args.dropout)
@@ -95,7 +96,7 @@ def main():
             os.path.join(args.out, 'best_model.npz'), model)
 
     print('Updating history for the test nodes...')
-    model.make_exact(10, 32)
+    model.make_exact(10, args.batchsize)
 
     print('Running test...')
     _, accuracy = model.evaluate(idx_test)
