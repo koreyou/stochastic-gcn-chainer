@@ -30,8 +30,6 @@ def main():
     parser.add_argument('--weight-decay', type=float, default=5e-4)
     parser.add_argument('--validation-interval', type=int, default=1,
                         help='Number of updates before running validation')
-    parser.add_argument('--early-stopping', action='store_true',
-                        help='Enable early stopping.')
     parser.add_argument('--normalization', default='gcn',
                         choices=['pygcn', 'gcn'],
                         help='Variant of adjacency matrix normalization method to use')
@@ -78,22 +76,17 @@ def main():
         ['epoch', 'main/loss', 'validation/main/loss',
          'main/accuracy', 'validation/main/accuracy', 'elapsed_time']))
 
-    if args.early_stopping:
-        # Take a best snapshot
-        record_trigger = training.triggers.MinValueTrigger(
-            'validation/main/loss', (args.validation_interval, 'epoch'))
-        trainer.extend(
-            extensions.snapshot_object(model, 'best_model.npz'),
-            trigger=record_trigger)
+    # Take a best snapshot
+    record_trigger = training.triggers.MinValueTrigger(
+        'validation/main/loss', (args.validation_interval, 'epoch'))
+    trainer.extend(
+        extensions.snapshot_object(model, 'best_model.npz'),
+        trigger=record_trigger)
 
     trainer.run()
 
-    if args.early_stopping:
-        chainer.serializers.load_npz(
-            os.path.join(args.out, 'best_model.npz'), model)
-    else:
-        chainer.serializers.save_npz(
-            os.path.join(args.out, 'best_model.npz'), model)
+    chainer.serializers.load_npz(
+        os.path.join(args.out, 'best_model.npz'), model)
 
     print('Updating history for the test nodes...')
     model.make_exact(10, args.batchsize)
