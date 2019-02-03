@@ -12,9 +12,9 @@ import scipy.sparse as sp
 from tqdm import tqdm
 
 
-class GCN(chainer.Chain):
+class BaseGCN(chainer.Chain):
     def __init__(self, adj, features, labels, feat_size, dropout=0.5):
-        super(GCN, self).__init__()
+        super(BaseGCN, self).__init__()
         if not sp.isspmatrix_csr(adj):
             raise TypeError(
                 'adj must be csr_matrix but %s was given' % str(type(adj)))
@@ -40,31 +40,7 @@ class GCN(chainer.Chain):
 
     def _forward(self, adj_0, feature_0, adj_1, history_1, adj_sample_1,
                  history_sample_1, rf_sample_1):
-
-        # Do not calculate CV because self.features are always fixed
-        h = sparse_matmul2(adj_0, feature_0)
-        if chainer.config.train:
-            with chainer.no_backprop_mode():
-                h.data = F.dropout(h.data, self.dropout).data
-            h.eliminate_zeros()
-        h = sparse_matmul2(h, self.W1)
-        del feature_0, adj_0
-
-        # Do NOT update history1 because it is a feature vector
-        # self.history1[adjs[0][2]] = chainer.backends.cuda.to_cpu(h)
-        h = F.relu(h)
-
-        h1 = h
-        h = sparse_matmul2(adj_sample_1, h - history_sample_1)
-        # update history after using the old history
-        self.history[rf_sample_1] = chainer.backends.cuda.to_cpu(h1.data)
-        del h1, rf_sample_1, history_sample_1
-
-        h += sparse_matmul2(adj_1, history_1)
-        h = F.dropout(h, self.dropout)
-        h = F.matmul(h, self.W2)
-
-        return h
+        raise NotImplementedError()
 
     def __call__(self, *args):
         mask = args[0]
@@ -125,11 +101,65 @@ class GCN(chainer.Chain):
 
     def to_gpu(self, device=None):
         self.labels = chainer.backends.cuda.to_gpu(self.labels, device=device)
-        return super(GCN, self).to_gpu(device=device)
+        return super(BaseGCN, self).to_gpu(device=device)
 
     def to_cpu(self):
         self.labels = chainer.backends.cuda.to_cpu(self.labels)
-        return super(GCN, self).to_cpu()
+        return super(BaseGCN, self).to_cpu()
+
+
+class CVGCN(BaseGCN):
+    """ GCN with control variate (CV) sampling """
+    def _forward(self, adj_0, feature_0, adj_1, history_1, adj_sample_1,
+                 history_sample_1, rf_sample_1):
+
+        # Do not calculate CV because self.features are always fixed
+        h = sparse_matmul2(adj_0, feature_0)
+        if chainer.config.train:
+            with chainer.no_backprop_mode():
+                h.data = F.dropout(h.data, self.dropout).data
+            h.eliminate_zeros()
+        h = sparse_matmul2(h, self.W1)
+        del feature_0, adj_0
+
+        # Do NOT update history1 because it is a feature vector
+        # self.history1[adjs[0][2]] = chainer.backends.cuda.to_cpu(h)
+        h = F.relu(h)
+
+        h1 = h
+        h = sparse_matmul2(adj_sample_1, h - history_sample_1)
+        # update history after using the old history
+        self.history[rf_sample_1] = chainer.backends.cuda.to_cpu(h1.data)
+        del h1, rf_sample_1, history_sample_1
+
+        h += sparse_matmul2(adj_1, history_1)
+        h = F.dropout(h, self.dropout)
+        h = F.matmul(h, self.W2)
+
+        return h
+
+
+class NSGCN(BaseGCN):
+    """ Neighbor sampling GCN """
+    def _forward(self, adj_0, feature_0, adj_1, history_1, adj_sample_1,
+                 history_sample_1, rf_sample_1):
+        del history_1, adj_1, rf_sample_1, history_sample_1
+
+        h = sparse_matmul2(adj_0, feature_0)
+        if chainer.config.train:
+            with chainer.no_backprop_mode():
+                h.data = F.dropout(h.data, self.dropout).data
+            h.eliminate_zeros()
+        h = sparse_matmul2(h, self.W1)
+        del feature_0, adj_0
+
+        h = F.relu(h)
+
+        h = sparse_matmul2(adj_sample_1, h)
+        h = F.dropout(h, self.dropout)
+        h = F.matmul(h, self.W2)
+
+        return h
 
 
 class SparseMatmul2(chainer.Function):

@@ -8,7 +8,7 @@ from chainer.training import extensions
 import numpy as np
 import scipy.sparse as sp
 
-from nets import GCN
+from nets import CVGCN, NSGCN
 from graphs import load_data
 from sampling import random_sampling
 
@@ -33,6 +33,8 @@ def main():
     parser.add_argument('--weight-decay', type=float, default=5e-4)
     parser.add_argument('--validation-interval', type=int, default=1,
                         help='Number of updates before running validation')
+    parser.add_argument('--sampling-method', default='cv', choices=['cv', 'ns'],
+                        help='Variant of sampling method to use')
     parser.add_argument('--normalization', default='gcn',
                         choices=['pygcn', 'gcn'],
                         help='Variant of adjacency matrix normalization method to use')
@@ -48,7 +50,8 @@ def main():
         TupleDataset(idx_val), batch_size=args.batchsize, repeat=False, shuffle=False)
 
     # Set up a neural network to train.
-    model = GCN(adj, features, labels, args.unit, dropout=args.dropout)
+    model_func = CVGCN if args.sampling_method == 'cv' else NSGCN
+    model = model_func(adj, features, labels, args.unit, dropout=args.dropout)
 
     if args.gpu >= 0:
         # Make a specified GPU current
