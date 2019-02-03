@@ -1,6 +1,8 @@
-# Chainer implementation of GCN/GAT
+**This project is still WIP.**
 
-This project implements GCN ([Kipf and Welling. 2017. Semi-Supervised Classification with Graph Convolutional Networks. ICLR.](https://arxiv.org/abs/1609.02907)) and GAT ([Veličković et al. 2018. Graph Attention Networks. ICLR.](https://arxiv.org/abs/1710.10903)) with [Chainer](https://chainer.org/).
+# Chainer implementation of Stochastic GCN
+
+This project implements GCN ([Chen et al. 2018. Stochastic Training of Graph Convolutional Networks with Variance Reduction. NIPS.](https://arxiv.org/abs/1609.02907)) and GAT ([Veličković et al. 2018. Graph Attention Networks. ICLR.](http://proceedings.mlr.press/v80/chen18p.html)) with [Chainer](https://chainer.org/).
 The project includes codes to reproduce the experiments on multiple graph classification datasets. **This is NOT an official implementation by the authors.**
 
 I referenced [@takyamamoto's implementation of GCN](https://github.com/takyamamoto/Graph-Convolution-Chainer) to implement this project.
@@ -26,41 +28,19 @@ python train.py
 ```
 
 Refer to `python train.py -h` for the options.
-Note that you can enable early stopping by `--early-stopping` flag, but the overhead for saving intermediate models is quite large.
 
 
 # Reproducing the paper
 
-## GCN
+I get around 81-83% test accuracy as in the original GCN.
+I will add more formal experiment result later.
 
-Run training in with same parameters as the original paper.
+# TODO
 
-```
-python train.oy --model gcn --lr 0.01 --unit 16 --dataset $DATASET
-```
+Things to do before removing "WIP" flag:
 
-Following table shows the average (min/max) over 10 runs.
-
-
-| Dataset  | Reported in the paper | My implementation |
-|----------|-----------------------|-------------------|
-| Cora | 81.5 | 81.6 (81.2/82.3) |
-| Citeseer | 70.3 | 71.2 (70.9/71.7) |
-| Pubmed | 79.0 | 78.8 (78.4/79.2) |
-
-My implementation is comparable with the reported result.
-
-## GAT
-
-```
-python train.oy --dataset $DATASET --early-stopping
-```
-
-Average test accuracy was 83.7 (from 82.6 to 84.7) over 10 runs.
-The test accuracy reported in the paper was 83.0, so my implementation is comparable with the reported result.
-
-My implementation took 0.3214s per epoch on K80 GPU (Google Colabolatory), which is slightly slower than 0.3002s (non-sparse) and 0.2043 (sparse) of the tensorflow implementation by the authors.
-
+* More efficient adjacency matrix generation.
+* Add experiment results.
 
 # Licensing
 
