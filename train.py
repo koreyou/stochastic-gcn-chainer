@@ -91,6 +91,9 @@ def main():
     print('Updating history for the test nodes...')
     model.make_exact(10, args.batchsize)
 
+    chainer.serializers.save_npz(
+        os.path.join(args.out, 'best_model.npz'), model)
+
     print('Running test...')
     _, accuracy = model.evaluate(idx_test)
     print('Test accuracy = %f' % accuracy)
