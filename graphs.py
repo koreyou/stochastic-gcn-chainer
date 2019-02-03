@@ -80,7 +80,7 @@ def load_data(dataset_str, normalization='gcn'):
     features = sp.vstack((allx, tx)).tolil()
     features[test_idx_reorder, :] = features[test_idx_range, :]
     features = preprocess_features(features)
-    features = features.tocsr()
+    features = features.tocsr().astype(np.float32)
 
     adj = nx.adjacency_matrix(nx.from_dict_of_lists(graph)).astype(np.float32)
     adj = adj.tocsr()

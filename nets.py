@@ -40,12 +40,14 @@ class GCN(chainer.Chain):
 
     def _forward(self, mask):
         device = chainer.backends.cuda.get_device_from_array(mask)
+        mask = chainer.backends.cuda.to_cpu(mask)
         adjs_sample, adjs, rfs_sample, rfs = random_sampling(self.adj, mask, 2, self.n_samples)
 
         # Do not calculate CV because self.features are always fixed
         history = self.features[rfs[0]]
         if device.id >= 0:
-            history = chainer.backends.cuda.to_gpu(history, device=device)
+            history = csr_to_gpu(history)
+            adjs[0] = csr_to_gpu(adjs[0])
         h = sparse_matmul2(adjs[0], history)
         if chainer.config.train:
             with chainer.no_backprop_mode():
@@ -60,7 +62,11 @@ class GCN(chainer.Chain):
         h = F.relu(h)
 
         h1 = h
-        h = sparse_matmul2(adjs_sample[1], h - self.history2[rfs_sample[1]])
+        history = self.history2[rfs_sample[1]]
+        if device.id >= 0:
+            history = chainer.backends.cuda.to_gpu(history, device=device)
+            adjs_sample[1] = csr_to_gpu(adjs_sample[1])
+        h = sparse_matmul2(adjs_sample[1], h - history)
         # update history
         self.history2[rfs_sample[1]] = chainer.backends.cuda.to_cpu(h1.data)
         del h1
@@ -68,6 +74,7 @@ class GCN(chainer.Chain):
         history = self.history2[rfs[1]]
         if device.id >= 0:
             history = chainer.backends.cuda.to_gpu(history, device=device)
+            adjs[1] = csr_to_gpu(adjs[1])
         h += sparse_matmul2(adjs[1], history)
 
         h = F.dropout(h, self.dropout)
@@ -190,3 +197,8 @@ def sparse_matmul2(a, b):
         return SparseMatmul2(None, b)(a)
     else:
         return SparseMatmul2(None, None)(a, b)
+
+
+def csr_to_gpu(x):
+    from cupyx.scipy.sparse import csr_matrix as xcsr_matrix
+    return xcsr_matrix(x)

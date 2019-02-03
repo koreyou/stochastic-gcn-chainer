@@ -44,8 +44,9 @@ def random_sampling(adj, rf, n_layers, n_samples):
         rf_sample_ln1 = adj_sample_l.T.dot(rf_sample_l).astype(bool)
         rf_ln1 = adj.T.dot(rf_sample_l).astype(bool)
 
-        adj_sample_l = adj[rf_sample_l, :][:, rf_sample_ln1]
-        adj_l = adj[rf_sample_l, :][:, rf_ln1]
+        # Slicing for some reason convert matrix to np.float64
+        adj_sample_l = adj[rf_sample_l, :][:, rf_sample_ln1].astype(np.float32)
+        adj_l = adj[rf_sample_l, :][:, rf_ln1].astype(np.float32)
 
         adjs_sample.append(adj_sample_l)
         adjs.append(adj_l)
