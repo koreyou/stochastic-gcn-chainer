@@ -5,9 +5,12 @@ import chainer
 from chainer import training
 from chainer.datasets import TupleDataset
 from chainer.training import extensions
+import numpy as np
+import scipy.sparse as sp
 
 from nets import GCN
 from graphs import load_data
+from sampling import random_sampling
 
 
 def main():
@@ -62,15 +65,18 @@ def main():
         print("Loading model from " + args.resume)
         chainer.serializers.load_npz(args.resume, model)
 
-    updater = training.StandardUpdater(train_iter, optimizer, device=args.gpu)
+    converter = create_convert_func(model, adj, 2)
+    updater = training.StandardUpdater(
+        train_iter, optimizer, converter=converter, device=args.gpu)
     trigger = training.triggers.EarlyStoppingTrigger(
         monitor='validation/main/loss', patients=100,
         check_trigger=(args.validation_interval, 'epoch'),
         max_trigger=(args.epoch, 'epoch'))
     trainer = training.Trainer(updater, trigger, out=args.out)
 
-    trainer.extend(extensions.Evaluator(dev_iter, model, device=args.gpu),
-                   trigger=(args.validation_interval, 'epoch'))
+    trainer.extend(
+        extensions.Evaluator(dev_iter, model, converter=converter, device=args.gpu),
+        trigger=(args.validation_interval, 'epoch'))
     trainer.extend(extensions.LogReport())
     trainer.extend(extensions.PrintReport(
         ['epoch', 'main/loss', 'validation/main/loss',
@@ -89,15 +95,49 @@ def main():
         os.path.join(args.out, 'best_model.npz'), model)
 
     print('Updating history for the test nodes...')
-    model.make_exact(10, args.batchsize)
+    model.make_exact(converter, 10, args.batchsize, device=args.gpu)
 
     chainer.serializers.save_npz(
         os.path.join(args.out, 'best_model.npz'), model)
 
     print('Running test...')
-    _, accuracy = model.evaluate(idx_test)
+    _, accuracy = model.evaluate(
+        idx_test, converter, args.batchsize, device=args.gpu)
     print('Test accuracy = %f' % accuracy)
 
+
+def create_convert_func(model, adj, n_samples):
+    def convert(batch, device=None, with_label=True):
+        idx = np.array([i for i, in batch], dtype=np.int32)
+        mask = np.zeros([adj.shape[0]], dtype=bool)
+        mask[idx] = True
+        adjs_sample, adjs, rfs_sample, rfs = random_sampling(
+            adj, mask, 2, n_samples)
+
+        adj_0 = adjs[0]
+        feature_0 = model.features[rfs[0]]
+        adj_1 = adjs[1]
+        history_1 = model.history[rfs[1]]
+        adj_sample_1 = adjs_sample[1]
+        history_sample_1 = model.history[rfs_sample[1]]
+        rf_sample_1 = rfs_sample[1]
+
+        batch = [
+            mask, adj_0, feature_0, adj_1, history_1, adj_sample_1,
+            history_sample_1, rf_sample_1
+        ]
+        if device is not None and device >= 0:
+            batch = [to_gpu(x, device) for x in batch]
+        return tuple(batch)
+    return convert
+
+
+def to_gpu(x, device):
+    if sp.issparse(x):
+        from cupyx.scipy.sparse import csr_matrix as xcsr_matrix
+        return xcsr_matrix(x)
+    else:
+        return chainer.dataset.to_device(device, x)
 
 
 if __name__ == '__main__':

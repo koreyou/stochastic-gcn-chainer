@@ -3,14 +3,13 @@ import chainer.functions as F
 import numpy as np
 from chainer import initializers
 from chainer import reporter
+from chainer.datasets import TupleDataset
 try:
     from cupyx.scipy.sparse import issparse
 except ImportError:
     from scipy.sparse import issparse
 import scipy.sparse as sp
 from tqdm import tqdm
-
-from sampling import random_sampling
 
 
 class GCN(chainer.Chain):
@@ -39,54 +38,37 @@ class GCN(chainer.Chain):
             (adj.shape[0], feat_size)).astype(np.float32)
         self.add_persistent('history', history)
 
-    def _forward(self, mask):
-        device = chainer.backends.cuda.get_device_from_array(mask)
-        mask = chainer.backends.cuda.to_cpu(mask)
-        adjs_sample, adjs, rfs_sample, rfs = random_sampling(self.adj, mask, 2, self.n_samples)
+    def _forward(self, adj_0, feature_0, adj_1, history_1, adj_sample_1,
+                 history_sample_1, rf_sample_1):
 
         # Do not calculate CV because self.features are always fixed
-        history = self.features[rfs[0]]
-        if device.id >= 0:
-            history = csr_to_gpu(history)
-            adjs[0] = csr_to_gpu(adjs[0])
-        h = sparse_matmul2(adjs[0], history)
+        h = sparse_matmul2(adj_0, feature_0)
         if chainer.config.train:
             with chainer.no_backprop_mode():
                 h.data = F.dropout(h.data, self.dropout).data
             h.eliminate_zeros()
         h = sparse_matmul2(h, self.W1)
-        del history
+        del feature_0, adj_0
 
         # Do NOT update history1 because it is a feature vector
         # self.history1[adjs[0][2]] = chainer.backends.cuda.to_cpu(h)
-
         h = F.relu(h)
 
         h1 = h
-        history = self.history[rfs_sample[1]]
-        if device.id >= 0:
-            history = chainer.backends.cuda.to_gpu(history, device=device)
-            adjs_sample[1] = csr_to_gpu(adjs_sample[1])
-        h = sparse_matmul2(adjs_sample[1], h - history)
-        # update history
-        self.history[rfs_sample[1]] = chainer.backends.cuda.to_cpu(h1.data)
-        del h1
+        h = sparse_matmul2(adj_sample_1, h - history_sample_1)
+        # update history after using the old history
+        self.history[rf_sample_1] = chainer.backends.cuda.to_cpu(h1.data)
+        del h1, rf_sample_1, history_sample_1
 
-        history = self.history[rfs[1]]
-        if device.id >= 0:
-            history = chainer.backends.cuda.to_gpu(history, device=device)
-            adjs[1] = csr_to_gpu(adjs[1])
-        h += sparse_matmul2(adjs[1], history)
-
+        h += sparse_matmul2(adj_1, history_1)
         h = F.dropout(h, self.dropout)
         h = F.matmul(h, self.W2)
 
         return h
 
-    def __call__(self, idx):
-        mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
-        mask[idx] = True
-        out = self._forward(mask)
+    def __call__(self, *args):
+        mask = args[0]
+        out = self._forward(*args[1:])
 
         loss = F.softmax_cross_entropy(out, self.labels[mask])
         accuracy = F.accuracy(out, self.labels[mask])
@@ -96,44 +78,49 @@ class GCN(chainer.Chain):
         
         return loss
 
-    def make_exact(self, epochs, batchsize):
+    def make_exact(self, converter, epochs, batchsize, device=None):
         """ Run forward propagation multiple times to get the exact histories.
         (Ref. section 4.1 in the paper)
         """
         indices = self.xp.random.permutation(self.features.shape[0])
         for _ in tqdm(range(epochs)):
-            for i in range(0, self.features.shape[0] + batchsize, batchsize):
-                idx = indices[i:i + batchsize]
-                mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
-                mask[idx] = True
+            test_iter = chainer.iterators.SerialIterator(
+                TupleDataset(indices), batch_size=batchsize, repeat=False,
+                shuffle=False)
+            for batch in test_iter:
+                args = converter(batch, device=device)
                 with chainer.using_config('train', False), chainer.no_backprop_mode():
-                    self._forward(mask)
+                    self._forward(*args[1:])
 
-    def evaluate(self, idx):
-        mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
-        mask[idx] = True
-        with chainer.using_config('train', False), chainer.no_backprop_mode():
-            out = self._forward(mask)
-
-        loss = F.softmax_cross_entropy(out, self.labels[mask])
-        accuracy = F.accuracy(out, self.labels[mask])
+    def evaluate(self, idx, converter, batchsize, device=None):
+        outputs = []
+        labels = []
+        test_iter = chainer.iterators.SerialIterator(
+            TupleDataset(idx), batch_size=batchsize, repeat=False,
+            shuffle=False)
+        for batch in test_iter:
+            args = converter(batch, device=device)
+            mask = args[0]
+            with chainer.using_config('train', False), chainer.no_backprop_mode():
+                out = self._forward(*args[1:])
+            outputs.append(chainer.backends.cuda.to_cpu(out.data))
+            labels.append(chainer.backends.cuda.to_cpu(self.labels[mask]))
+        outputs = np.concatenate(outputs, axis=0)
+        labels = np.concatenate(labels, axis=0)
+        loss = F.softmax_cross_entropy(outputs, labels)
+        accuracy = F.accuracy(outputs, labels)
 
         return float(loss.data), float(accuracy.data)
 
-    def predict(self, idx):
-        mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
-        mask[idx] = True
+    def predict(self, *args):
         with chainer.using_config('train', False), chainer.no_backprop_mode():
-            out = self._forward(mask)
+            out = self._forward(*args[1:])
         pred = self.xp.argmax(out.data)
         return pred
 
-    def predict_proba(self, idx):
-        mask = self.xp.zeros([self.features.shape[0]], dtype=bool)
-        mask[idx] = True
+    def predict_proba(self, *args):
         with chainer.using_config('train', False), chainer.no_backprop_mode():
-            out = self._forward(mask)
-        out = out[idx]
+            out = F.softmax(self._forward(*args[1:]))
         return out.data
 
     def to_gpu(self, device=None):
@@ -198,8 +185,3 @@ def sparse_matmul2(a, b):
         return SparseMatmul2(None, b)(a)
     else:
         return SparseMatmul2(None, None)(a, b)
-
-
-def csr_to_gpu(x):
-    from cupyx.scipy.sparse import csr_matrix as xcsr_matrix
-    return xcsr_matrix(x)
