@@ -35,8 +35,9 @@ class GCN(chainer.Chain):
         self.labels = labels
         self.n_samples = 2
         # FIXME: initialize history with proper values
-        self.history2 = np.random.random(
+        history = np.random.random(
             (adj.shape[0], feat_size)).astype(np.float32)
+        self.add_persistent('history', history)
 
     def _forward(self, mask):
         device = chainer.backends.cuda.get_device_from_array(mask)
@@ -62,16 +63,16 @@ class GCN(chainer.Chain):
         h = F.relu(h)
 
         h1 = h
-        history = self.history2[rfs_sample[1]]
+        history = self.history[rfs_sample[1]]
         if device.id >= 0:
             history = chainer.backends.cuda.to_gpu(history, device=device)
             adjs_sample[1] = csr_to_gpu(adjs_sample[1])
         h = sparse_matmul2(adjs_sample[1], h - history)
         # update history
-        self.history2[rfs_sample[1]] = chainer.backends.cuda.to_cpu(h1.data)
+        self.history[rfs_sample[1]] = chainer.backends.cuda.to_cpu(h1.data)
         del h1
 
-        history = self.history2[rfs[1]]
+        history = self.history[rfs[1]]
         if device.id >= 0:
             history = chainer.backends.cuda.to_gpu(history, device=device)
             adjs[1] = csr_to_gpu(adjs[1])
