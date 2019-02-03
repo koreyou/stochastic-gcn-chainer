@@ -2,7 +2,7 @@
 
 # Chainer implementation of Stochastic GCN
 
-This project implements GCN ([Chen et al. 2018. Stochastic Training of Graph Convolutional Networks with Variance Reduction. NIPS.](https://arxiv.org/abs/1609.02907)) and GAT ([Veličković et al. 2018. Graph Attention Networks. ICLR.](http://proceedings.mlr.press/v80/chen18p.html)) with [Chainer](https://chainer.org/).
+This project implements GCN ([Chen et al. 2018. Stochastic Training of Graph Convolutional Networks with Variance Reduction. NIPS.](http://proceedings.mlr.press/v80/chen18p.html)) with [Chainer](https://chainer.org/).
 The project includes codes to reproduce the experiments on multiple graph classification datasets. **This is NOT an official implementation by the authors.**
 
 I referenced [@takyamamoto's implementation of GCN](https://github.com/takyamamoto/Graph-Convolution-Chainer) to implement this project.
@@ -41,6 +41,7 @@ Things to do before removing "WIP" flag:
 
 * More efficient adjacency matrix generation.
 * Add experiment results.
+* Implement control variate with dropout (a.k.a. CVD).
 
 # Licensing
 
