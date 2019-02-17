@@ -20,7 +20,8 @@ cdef extern from "sampling_c.hpp":
     const int32_t * const in_indptr, const long unsigned int in_indptr_size,
     const float * const in_diags, const cbool * const mask,
     const int n_samples, vector[float] &out_data, vector[int32_t] &out_indices,
-    vector[int32_t] &out_indptr);
+    vector[int32_t] &out_indptr, vector[float] &out_full_data,
+    vector[int32_t] &out_full_indices, vector[int32_t] &out_full_indptr);
 
 
 def random_sampling(adj, rf, n_layers, n_samples):
@@ -57,14 +58,15 @@ def random_sampling(adj, rf, n_layers, n_samples):
     adj_n.setdiag(0.)
     adj_n.eliminate_zeros()
     for _ in range(n_layers):
-        adj_sample_l = construct_random_propagation_matrix(adj_n, adj_diag, rf_sample_l, n_samples)
+        adj_sample_l, adj_l = construct_random_propagation_matrix(
+            adj_n, adj_diag, rf_sample_l, n_samples)
 
         rf_sample_ln1 = adj_sample_l.sum(0).A.flatten().astype(bool)
-        rf_ln1 = adj.T.dot(rf_sample_l).astype(bool)
+        rf_ln1 = adj_l.sum(0).A.flatten().astype(bool)
 
         # Slicing for some reason convert matrix to np.float64
         adj_sample_l = adj_sample_l[:, rf_sample_ln1].astype(np.float32)
-        adj_l = adj[rf_sample_l, :][:, rf_ln1].astype(np.float32)
+        adj_l = adj_l[:, rf_ln1].astype(np.float32)
 
         adjs_sample.append(adj_sample_l)
         adjs.append(adj_l)
@@ -79,10 +81,15 @@ def random_sampling(adj, rf, n_layers, n_samples):
 def construct_random_propagation_matrix(adj, in_diags, mask, n_samples):
     assert adj.shape[0] == len(in_diags)
     assert adj.shape[0] == len(mask)
-    data, indices, indptr = construct_random_propagation_matrix_impl(
+    data, indices, indptr, data_full, indices_full, indptr_full = construct_random_propagation_matrix_impl(
         adj.data, adj.indices, adj.indptr, in_diags, mask, n_samples
     )
-    return sp.csr_matrix((data, indices, indptr), shape=(len(indptr) - 1, adj.shape[1]))
+    adj_sample = sp.csr_matrix(
+        (data, indices, indptr), shape=(len(indptr) - 1, adj.shape[1]))
+    adj_full = sp.csr_matrix(
+        (data_full, indices_full, indptr_full),
+        shape=(len(indptr) - 1, adj.shape[1]))
+    return adj_sample, adj_full
 
 
 @cython.boundscheck(False)
@@ -101,11 +108,12 @@ def construct_random_propagation_matrix_impl(
 
     cdef long unsigned int in_indptr_size = len(in_indptr)
 
-    cdef vector[float] out_data
-    cdef vector[int32_t] out_indices, out_indptrs
+    cdef vector[float] out_data, out_full_data
+    cdef vector[int32_t] out_indices, out_indptrs, out_full_indices, out_full_indptrs
     c_construct_random_propagation_matrix(
       &in_data[0], &in_indices[0], &in_indptr[0], in_indptr_size, &in_diags[0],
-      <cbool*>&mask[0], n_samples, out_data, out_indices, out_indptrs)
+      <cbool*>&mask[0], n_samples, out_data, out_indices, out_indptrs,
+      out_full_data, out_full_indices, out_full_indptrs)
 
     cdef ArrayWrapperFloat out_data_w = ArrayWrapperFloat()
     out_data_w.set_data(out_data)
@@ -119,7 +127,19 @@ def construct_random_propagation_matrix_impl(
     out_indptrs_w.set_data(out_indptrs)
     out_indptrs_np = np.asarray(out_indptrs_w)
 
-    return out_data_np, out_indices_np, out_indptrs_np
+    cdef ArrayWrapperFloat out_full_data_w = ArrayWrapperFloat()
+    out_full_data_w.set_data(out_full_data)
+    out_full_data_np = np.asarray(out_full_data_w)
+
+    cdef ArrayWrapperInt out_full_indices_w = ArrayWrapperInt()
+    out_full_indices_w.set_data(out_full_indices)
+    out_full_indices_np = np.asarray(out_full_indices_w)
+
+    cdef ArrayWrapperInt out_full_indptrs_w = ArrayWrapperInt()
+    out_full_indptrs_w.set_data(out_full_indptrs)
+    out_full_indptrs_np = np.asarray(out_full_indptrs_w)
+
+    return out_data_np, out_indices_np, out_indptrs_np, out_full_data_np, out_full_indices_np, out_full_indptrs_np
 
 
 cdef class ArrayWrapperInt(object):
