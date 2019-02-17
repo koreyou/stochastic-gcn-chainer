@@ -6,6 +6,7 @@ import scipy.sparse as sp
 cimport numpy as np
 from libcpp.vector cimport vector
 from cpython cimport Py_buffer
+from libc.stdint cimport int32_t
 
 
 cdef extern from "<utility>" namespace "std" nogil:
@@ -14,10 +15,10 @@ cdef extern from "<utility>" namespace "std" nogil:
 
 cdef extern from "sampling_c.hpp":
     void c_construct_random_propagation_matrix(
-      const float * const in_data, const int * const in_indices,
-      const int * const in_indptr, const long unsigned int in_indptr_size,
+      const float * const in_data, const int32_t * const in_indices,
+      const int32_t * const in_indptr, const long unsigned int in_indptr_size,
       const int n_samples, vector[float] &out_data,
-      vector[int] &out_indices, vector[int] &out_indptrs)
+      vector[int32_t] &out_indices, vector[int32_t] &out_indptrs)
 
 
 def random_sampling(adj, rf, n_layers, n_samples):
@@ -85,12 +86,12 @@ def construct_random_propagation_matrix(adj, n_samples):
 @cython.wraparound(False)
 def construct_random_propagation_matrix_impl(
         np.ndarray[float, ndim=1, mode="c"] in_data not None,
-        np.ndarray[int, ndim=1, mode="c"] in_indices not None,
-        np.ndarray[int, ndim=1, mode="c"] in_indptr not None,
+        np.ndarray[int32_t, ndim=1, mode="c"] in_indices not None,
+        np.ndarray[int32_t, ndim=1, mode="c"] in_indptr not None,
         int n_samples):
     cdef long unsigned int in_indptr_size = len(in_indptr)
     cdef vector[float] out_data
-    cdef vector[int] out_indices, out_indptrs
+    cdef vector[int32_t] out_indices, out_indptrs
     c_construct_random_propagation_matrix(
       &in_data[0], &in_indices[0],
       &in_indptr[0], in_indptr_size,
@@ -112,14 +113,14 @@ def construct_random_propagation_matrix_impl(
 
 
 cdef class ArrayWrapperInt(object):
-    cdef vector[int] vec
+    cdef vector[int32_t] vec
     cdef Py_ssize_t shape[1]
     cdef Py_ssize_t strides[1]
 
     # constructor and destructor are fairly unimportant now since
     # vec will be destroyed automatically.
 
-    cdef set_data(self, vector[int]& data):
+    cdef set_data(self, vector[int32_t]& data):
        self.vec = move(data)
 
     # now implement the buffer protocol for the class
@@ -129,7 +130,7 @@ cdef class ArrayWrapperInt(object):
         cdef Py_ssize_t itemsize = sizeof(self.vec[0])
 
         self.shape[0] = self.vec.size()
-        self.strides[0] = sizeof(int)
+        self.strides[0] = sizeof(int32_t)
         buffer.buf = <char *>&(self.vec[0])
         buffer.format = 'i'
         buffer.internal = NULL
