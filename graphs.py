@@ -129,12 +129,12 @@ def normalize_pygcn(a):
     Returns:
         scipy.sparse.csr_matrix: Normalized adjacency matrix
     """
-    a += sp.eye(a.shape[0])
-    rowsum = np.array(a.sum(1))
+    a += sp.eye(a.shape[0], dtype=np.float32)
+    rowsum = np.array(a.sum(1), dtype=np.float32)
     rowsum_inv = np.power(rowsum, -1).flatten()
     rowsum_inv[np.isinf(rowsum_inv)] = 0.
     # ~D in the GCN paper
-    d_tilde = sp.diags(rowsum_inv)
+    d_tilde = sp.diags(rowsum_inv, dtype=np.float32)
     return d_tilde.dot(a)
 
 
@@ -148,11 +148,11 @@ def normalize(adj):
     Returns:
         scipy.sparse.csr_matrix: Normalized adjacency matrix
     """
-    adj += sp.eye(adj.shape[0])
-    rowsum = np.array(adj.sum(1))
+    adj += sp.eye(adj.shape[0], dtype=np.float32)
+    rowsum = np.array(adj.sum(1), dtype=np.float32)
     d_inv_sqrt = np.power(rowsum, -0.5).flatten()
     d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
     # ~D in the GCN paper
-    d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
+    d_mat_inv_sqrt = sp.diags(d_inv_sqrt, dtype=np.float32)
     return d_mat_inv_sqrt.dot(adj).dot(d_mat_inv_sqrt)
 
