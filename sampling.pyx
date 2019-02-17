@@ -81,9 +81,8 @@ def construct_random_propagation_matrix(adj, n_samples):
     return sp.csr_matrix((data, indices, indptr), shape=adj.shape)
 
 
-#@cython.boundscheck(False)
-#@cython.wraparound(False)
-
+@cython.boundscheck(False)
+@cython.wraparound(False)
 def construct_random_propagation_matrix_impl(
         np.ndarray[float, ndim=1, mode="c"] in_data not None,
         np.ndarray[int, ndim=1, mode="c"] in_indices not None,
