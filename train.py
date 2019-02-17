@@ -10,7 +10,7 @@ import scipy.sparse as sp
 
 from nets import CVGCN, NSGCN
 from graphs import load_data
-from sampling import random_sampling
+from sampling import construct_random_sampling
 
 
 def main():
@@ -110,12 +110,12 @@ def main():
 
 
 def create_convert_func(model, adj, n_samples):
+    random_sampling = construct_random_sampling(adj, 2)
     def convert(batch, device=None, with_label=True):
         idx = np.array([i for i, in batch], dtype=np.int32)
         mask = np.zeros([adj.shape[0]], dtype=bool)
         mask[idx] = True
-        adjs_sample, adjs, rfs_sample, rfs = random_sampling(
-            adj, mask, 2, n_samples)
+        adjs_sample, adjs, rfs_sample, rfs = random_sampling(mask, n_samples)
 
         adj_0 = adjs[0]
         feature_0 = model.features[rfs[0]]
