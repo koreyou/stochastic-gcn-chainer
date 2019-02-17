@@ -36,10 +36,10 @@ std::vector<int> sample_permutation(const long unsigned int L, const long unsign
 
 void c_construct_random_propagation_matrix(
     const float * const in_data, const int32_t * const in_indices,
-    const int32_t * const in_indptr, const float * const in_diags,
-    const long unsigned int in_indptr_size,
-    const int n_samples, std::vector<float> &out_data,
-    std::vector<int32_t> &out_indices, std::vector<int32_t> &out_indptr) noexcept{
+    const int32_t * const in_indptr, const long unsigned int in_indptr_size,
+    const float * const in_diags, const bool * const mask, const int n_samples,
+    std::vector<float> &out_data, std::vector<int32_t> &out_indices,
+    std::vector<int32_t> &out_indptr) noexcept{
   const auto expected_size = n_samples * (in_indptr_size - 1);
   out_data.reserve(expected_size);
   out_indices.reserve(expected_size);
@@ -48,6 +48,9 @@ void c_construct_random_propagation_matrix(
   out_indptr.push_back(0);
 
   for (int i = 0; i < in_indptr_size - 1; ++i) {
+    if (!mask[i]) {
+      continue;
+    }
     const int start = in_indptr[i];
     const int end = in_indptr[i + 1];
     const auto sample_indices = sample_permutation(end - start, n_samples);
