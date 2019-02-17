@@ -13,6 +13,7 @@
 ###### Python debris ########
 
 *.pyc
+*.so
 
 
 ###### Impl. specific debris ########
@@ -27,6 +28,7 @@
 .lock*
 **/build/
 wscript*.py
+sampling.cpp
 
 ###### Work routines debris ########
 
