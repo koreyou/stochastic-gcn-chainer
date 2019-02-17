@@ -36,7 +36,8 @@ std::vector<int> sample_permutation(const long unsigned int L, const long unsign
 
 void c_construct_random_propagation_matrix(
     const float * const in_data, const int32_t * const in_indices,
-    const int32_t * const in_indptr, const long unsigned int in_indptr_size,
+    const int32_t * const in_indptr, const float * const in_diags,
+    const long unsigned int in_indptr_size,
     const int n_samples, std::vector<float> &out_data,
     std::vector<int32_t> &out_indices, std::vector<int32_t> &out_indptr) noexcept{
   const auto expected_size = n_samples * (in_indptr_size - 1);
@@ -51,12 +52,22 @@ void c_construct_random_propagation_matrix(
     const int end = in_indptr[i + 1];
     const auto sample_indices = sample_permutation(end - start, n_samples);
     // #neighbors / #samples according to the original paper.
-    const float n_D = (end - start) / float(sample_indices.size());
+    const float n_D = (end - start) / float(sample_indices.size() + 1);
+    bool flg = true;
     for (auto s : sample_indices){
+        if (flg && in_indices[start + s] > i) {
+          flg = false;
+          out_indices.push_back(i);
+          out_data.push_back(in_diags[i] * n_D);
+        }
         out_indices.push_back(in_indices[start + s]);
         out_data.push_back(in_data[start + s] * n_D);
     }
-    out_indptr.push_back(out_indptr.back() + sample_indices.size());
+    if (flg) {
+      out_indices.push_back(i);
+      out_data.push_back(in_diags[i] * n_D);
+    }
+    out_indptr.push_back(out_indptr.back() + sample_indices.size() + 1);
   }
   out_data.shrink_to_fit();
   out_indices.shrink_to_fit();

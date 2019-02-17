@@ -16,7 +16,8 @@ cdef extern from "<utility>" namespace "std" nogil:
 cdef extern from "sampling_c.hpp":
     void c_construct_random_propagation_matrix(
       const float * const in_data, const int32_t * const in_indices,
-      const int32_t * const in_indptr, const long unsigned int in_indptr_size,
+      const int32_t * const in_indptr, const float * const in_diags,
+      const long unsigned int in_indptr_size,
       const int n_samples, vector[float] &out_data,
       vector[int32_t] &out_indices, vector[int32_t] &out_indptrs)
 
@@ -50,13 +51,12 @@ def random_sampling(adj, rf, n_layers, n_samples):
     rfs_sample = []
     rfs = []
 
-    adj_diag = adj.diagonal()
+    adj_diag = np.ascontiguousarray(adj.diagonal())
     adj_n = copy.deepcopy(adj)
     adj_n.setdiag(0.)
     adj_n.eliminate_zeros()
     for _ in range(n_layers):
-        adj_sample_l = construct_random_propagation_matrix(adj_n, n_samples)
-        adj_sample_l.setdiag(adj_diag)
+        adj_sample_l = construct_random_propagation_matrix(adj_n, adj_diag, n_samples)
 
         rf_sample_ln1 = adj_sample_l.T.dot(rf_sample_l).astype(bool)
         rf_ln1 = adj.T.dot(rf_sample_l).astype(bool)
@@ -75,9 +75,10 @@ def random_sampling(adj, rf, n_layers, n_samples):
     return adjs_sample[::-1], adjs[::-1], rfs_sample[::-1], rfs[::-1]
 
 
-def construct_random_propagation_matrix(adj, n_samples):
+def construct_random_propagation_matrix(adj, in_diags, n_samples):
+    assert adj.shape[0] == len(in_diags)
     data, indices, indptr = construct_random_propagation_matrix_impl(
-        adj.data, adj.indices, adj.indptr, n_samples
+        adj.data, adj.indices, adj.indptr, in_diags, n_samples
     )
     return sp.csr_matrix((data, indices, indptr), shape=adj.shape)
 
@@ -88,13 +89,19 @@ def construct_random_propagation_matrix_impl(
         np.ndarray[float, ndim=1, mode="c"] in_data not None,
         np.ndarray[int32_t, ndim=1, mode="c"] in_indices not None,
         np.ndarray[int32_t, ndim=1, mode="c"] in_indptr not None,
+        np.ndarray[float, ndim=1, mode="c"] in_diags not None,
         int n_samples):
+    assert in_data.dtype == np.float32
+    assert in_indices.dtype == np.int32
+    assert in_indptr.dtype == np.int32
+    assert in_diags.dtype == np.float32
+
     cdef long unsigned int in_indptr_size = len(in_indptr)
     cdef vector[float] out_data
     cdef vector[int32_t] out_indices, out_indptrs
     c_construct_random_propagation_matrix(
       &in_data[0], &in_indices[0],
-      &in_indptr[0], in_indptr_size,
+      &in_indptr[0], &in_diags[0], in_indptr_size,
       n_samples, out_data, out_indices, out_indptrs)
 
     cdef ArrayWrapperFloat out_data_w = ArrayWrapperFloat()
